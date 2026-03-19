@@ -344,6 +344,10 @@ def on_lay_phase(data):
     state["hands"][pid] = [c for c in hand if c["id"] not in used_ids]
     state["laid_down"][pid] = groups
     state["message"] = f"🎉 {state['player_names'][pid]} laid down Phase {phase_num}!"
+    # If player just completed phase 10 → game over immediately, no need to empty hand
+    if phase_num == 10:
+        _end_round(code, pid)
+        return
     # Check if all players have laid down their phase → end round immediately
     all_laid = all(p in state["laid_down"] for p in state["players"])
     if all_laid:
@@ -456,13 +460,18 @@ def _end_round(code, winner_pid):
     for pid in state["players"]:
         if pid in state["laid_down"]:
             state["phases"][pid] = min(state["phases"][pid] + 1, 11)
-    # Check game over
+    # Check game over — first player to complete phase 10 wins immediately
     finishers = [p for p in state["players"] if state["phases"][p] > 10]
     if finishers:
-        champ = min(finishers, key=lambda p: state["scores"][p])
+        # Winner is the player who just laid phase 10 (winner_pid)
+        # If multiple finishers somehow, pick lowest score
+        if winner_pid in finishers:
+            champ = winner_pid
+        else:
+            champ = min(finishers, key=lambda p: state["scores"][p])
         state["game_over"] = True
         state["winner"] = champ
-        state["message"] = f"🏆 {state['player_names'][champ]} wins the game!"
+        state["message"] = f"🏆 {state['player_names'][champ]} completed Phase 10 and wins the game!"
     else:
         state["message"] = f"Round over! {state['player_names'][winner_pid]} went out. Starting next round..."
     broadcast_state(code)
