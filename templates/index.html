@@ -451,11 +451,19 @@ function renderGame(state){
   // Hand
   const hand=state.hand||[];
   const handEl=document.getElementById('hand-cards');
+  // Remember selected card before re-render
+  const prevSel = document.querySelector('.hand-fan .card.selected');
+  const prevSelId = prevSel ? prevSel.dataset.id : null;
   handEl.innerHTML=hand.map((c,i)=>`
-    <div class="card ${cardClass(c)} ${selectedCardIds.has(c.id)?'selected':''} ${i===hand.length-1&&state.drawn?'draw-anim':''}"
+    <div class="card ${cardClass(c)} ${i===hand.length-1&&state.drawn?'draw-anim':''}"
          onclick="toggleCard('${c.id}',event)" data-id="${c.id}">
       ${cardInner(c)}
     </div>`).join('');
+  // Restore selection after re-render
+  if(prevSelId){
+    const restore=document.querySelector(`.hand-fan .card[data-id="${prevSelId}"]`);
+    if(restore) restore.classList.add('selected');
+  }
 
   // Buttons
   const hasLaid=state.laid_down&&state.laid_down[myPid];
@@ -482,22 +490,22 @@ function cardInner(c){
 let lastToggleTime = 0;
 function toggleCard(id,e){
   if(e){e.preventDefault();e.stopPropagation();}
-  // Debounce — ignore if called twice within 300ms (prevents double fire on mobile)
+  // Debounce — ignore if called twice within 300ms
   const now = Date.now();
   if(now - lastToggleTime < 300) return;
   lastToggleTime = now;
   if(!gameState)return;
   if(hitMode){socket.emit('hit_on_phase',{code:myRoom,card_id:id,target_pid:hitMode.pid,group_idx:hitMode.gi});hitMode=false;toast('Hit attempted!');return;}
-  // Only allow ONE card selected at a time
-  if(selectedCardIds.has(id)){
-    selectedCardIds.clear();
-  } else {
-    selectedCardIds.clear();
-    selectedCardIds.add(id);
+  // Use DOM as single source of truth — no separate selectedCardIds needed
+  const allCards = document.querySelectorAll('.hand-fan .card');
+  const clickedEl = document.querySelector(`.hand-fan .card[data-id="${id}"]`);
+  const alreadySelected = clickedEl && clickedEl.classList.contains('selected');
+  // Deselect all first
+  allCards.forEach(el => el.classList.remove('selected'));
+  // If it wasn't selected before, select it now
+  if(!alreadySelected && clickedEl){
+    clickedEl.classList.add('selected');
   }
-  document.querySelectorAll('.hand-fan .card').forEach(el=>{
-    el.classList.toggle('selected', selectedCardIds.has(el.dataset.id));
-  });
 }
 function selectHitTarget(pid,gi){
   if(!gameState||gameState.current_turn!==myPid||!gameState.drawn||!gameState.laid_down[myPid])return;
@@ -516,12 +524,12 @@ function drawCard(source){
 function discardSelected(){
   if(!gameState||gameState.current_turn!==myPid)return;
   if(!gameState.drawn){toast('Draw a card first!');return;}
-  // Read selected card directly from DOM as source of truth
+  // Read directly from DOM — 100% reliable
   const selectedEl = document.querySelector('.hand-fan .card.selected');
-  const card_id = selectedEl ? selectedEl.dataset.id : [...selectedCardIds].pop();
-  if(!card_id){toast('Tap a card to select it first!');return;}
-  selectedCardIds.clear();
+  if(!selectedEl){toast('Select exactly 1 card to discard.');return;}
+  const card_id = selectedEl.dataset.id;
   document.querySelectorAll('.hand-fan .card').forEach(el=>el.classList.remove('selected'));
+  selectedCardIds.clear();
   playSound('discard');socket.emit('discard_card',{code:myRoom,card_id});
 }
 
