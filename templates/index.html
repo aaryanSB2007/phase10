@@ -453,7 +453,7 @@ function renderGame(state){
   const handEl=document.getElementById('hand-cards');
   handEl.innerHTML=hand.map((c,i)=>`
     <div class="card ${cardClass(c)} ${selectedCardIds.has(c.id)?'selected':''} ${i===hand.length-1&&state.drawn?'draw-anim':''}"
-         onclick="toggleCard('${c.id}',event)" ontouchend="toggleCard('${c.id}',event)" data-id="${c.id}">
+         onclick="toggleCard('${c.id}',event)" data-id="${c.id}">
       ${cardInner(c)}
     </div>`).join('');
 
@@ -479,16 +479,21 @@ function cardInner(c){
 }
 
 // Card selection
+let lastToggleTime = 0;
 function toggleCard(id,e){
   if(e){e.preventDefault();e.stopPropagation();}
+  // Debounce — ignore if called twice within 300ms (prevents double fire on mobile)
+  const now = Date.now();
+  if(now - lastToggleTime < 300) return;
+  lastToggleTime = now;
   if(!gameState)return;
   if(hitMode){socket.emit('hit_on_phase',{code:myRoom,card_id:id,target_pid:hitMode.pid,group_idx:hitMode.gi});hitMode=false;toast('Hit attempted!');return;}
-  // Only allow ONE card selected at a time — clicking a new card switches selection
+  // Only allow ONE card selected at a time
   if(selectedCardIds.has(id)){
-    selectedCardIds.clear(); // Deselect if tapping same card
+    selectedCardIds.clear();
   } else {
-    selectedCardIds.clear(); // Clear any previous selection first
-    selectedCardIds.add(id); // Then select the new card
+    selectedCardIds.clear();
+    selectedCardIds.add(id);
   }
   document.querySelectorAll('.hand-fan .card').forEach(el=>{
     el.classList.toggle('selected', selectedCardIds.has(el.dataset.id));
